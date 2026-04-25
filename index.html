@@ -320,30 +320,6 @@ function onOrientation(evt) {
   updateArrow();
 }
 
-async function enableOrientation() {
-  if (orientEnabled) return;
-
-  if (typeof DeviceOrientationEvent !== 'undefined' &&
-      typeof DeviceOrientationEvent.requestPermission === 'function') {
-    // iOS 13+ — must be called synchronously from within a user-gesture handler
-    try {
-      const result = await DeviceOrientationEvent.requestPermission();
-      if (result === 'granted') {
-        window.addEventListener('deviceorientation', onOrientation, true);
-        orientEnabled = true;
-      } else {
-        setStatus('Compass access denied — arrow shows bearing from North.');
-      }
-    } catch {
-      setStatus('Compass unavailable — arrow shows bearing from North.');
-    }
-  } else {
-    // Android and all other browsers
-    window.addEventListener('deviceorientationabsolute', onOrientation, true);
-    window.addEventListener('deviceorientation', onOrientation, true);
-    orientEnabled = true;
-  }
-}
 
 /* ── Overpass API ─────────────────────────────────────────── */
 async function findKebabs() {
@@ -490,16 +466,34 @@ function resetUI() {
 }
 
 /* ── Button handlers ──────────────────────────────────────── */
-startBtn.addEventListener('click', async function() {
+startBtn.addEventListener('click', function() {
   resetUI();
 
-  // Geolocation must be called synchronously within the user gesture —
-  // awaiting orientation permission first breaks iOS WebKit's activation
-  // context and causes a silent denial (error code 1, no prompt shown).
-  getLocation();
-
-  // Orientation permission can be requested after; it has its own dialog.
-  await enableOrientation();
+  if (typeof DeviceOrientationEvent !== 'undefined' &&
+      typeof DeviceOrientationEvent.requestPermission === 'function') {
+    // iOS: chain geolocation inside .then() so both calls share the same
+    // user gesture activation — await breaks the activation context.
+    DeviceOrientationEvent.requestPermission().then(function(state) {
+      if (state === 'granted') {
+        window.addEventListener('deviceorientation', onOrientation, true);
+        orientEnabled = true;
+      } else {
+        setStatus('Compass access denied — arrow shows bearing from North.');
+      }
+      getLocation();
+    }).catch(function() {
+      setStatus('Compass unavailable — arrow shows bearing from North.');
+      getLocation();
+    });
+  } else {
+    // Non-iOS: no permission dialog needed, set up listeners and go.
+    if (!orientEnabled) {
+      window.addEventListener('deviceorientationabsolute', onOrientation, true);
+      window.addEventListener('deviceorientation', onOrientation, true);
+      orientEnabled = true;
+    }
+    getLocation();
+  }
 });
 
 rescanBtn.addEventListener('click', function() {
