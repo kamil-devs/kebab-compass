@@ -444,14 +444,23 @@ function handlePlaces(elements) {
 }
 
 /* ── Geolocation ──────────────────────────────────────────── */
-function getLocation() {
+async function getLocation() {
   if (!navigator.geolocation) {
     setStatus('Geolocation is not supported by this browser.', true);
     return;
   }
 
+  // Check Permissions API state for diagnostics (iOS 16+)
+  var permState = 'n/a';
+  if (navigator.permissions) {
+    try {
+      var ps = await navigator.permissions.query({ name: 'geolocation' });
+      permState = ps.state;
+    } catch (e) {}
+  }
+
   compassWrap.classList.add('loading');
-  setStatus('Getting your location…');
+  setStatus('Getting location… [perm:' + permState + ']');
 
   navigator.geolocation.getCurrentPosition(
     function(pos) {
@@ -461,15 +470,7 @@ function getLocation() {
     },
     function(err) {
       compassWrap.classList.remove('loading');
-      var isIOS = /iP(hone|ad|od)/.test(navigator.userAgent);
-      var msgs = {
-        1: isIOS
-          ? 'Location blocked for this site. In Safari tap AA in the address bar → Website Settings → Location → Allow.'
-          : 'Location access denied — enable it in your browser settings.',
-        2: 'Your location is currently unavailable.',
-        3: 'Location request timed out — try again.',
-      };
-      setStatus(msgs[err.code] || 'Location error.', true);
+      setStatus('[' + err.code + '] ' + err.message, true);
       startBtn.textContent = 'Retry';
       startBtn.classList.remove('hidden');
     },
