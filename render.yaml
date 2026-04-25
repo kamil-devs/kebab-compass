@@ -7,9 +7,6 @@ services:
     pullRequestPreviewsEnabled: false
     headers:
       - path: /*
-        name: Permissions-Policy
-        value: geolocation=(self)
-      - path: /*
         name: X-Content-Type-Options
         value: nosniff
       - path: /*
