@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0d1117">
+  <title>Kebab Compass</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body { height: 100%; }
+
+    body {
+      background: #0d1117;
+      color: #e6edf3;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      padding: 24px 20px;
+      min-height: 100dvh;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+
+    h1 {
+      font-size: clamp(1rem, 5vw, 1.4rem);
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #f97316;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    /* ── Compass ──────────────────────────────────────────── */
+
+    .compass-wrap {
+      position: relative;
+      width: min(74vw, 52vh, 300px);
+      aspect-ratio: 1;
+      flex-shrink: 0;
+    }
+
+    .compass-svg {
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+      filter: drop-shadow(0 0 28px rgba(249, 115, 22, 0.18));
+    }
+
+    #compassNeedle {
+      transform-origin: 150px 150px;
+      transition: transform 0.15s ease-out;
+    }
+
+    .compass-wrap.loading .ring-outer {
+      animation: ringPulse 1.4s ease-in-out infinite;
+    }
+
+    @keyframes ringPulse {
+      0%, 100% { opacity: 0.35; }
+      50%       { opacity: 0.9; }
+    }
+
+    /* ── Status ───────────────────────────────────────────── */
+
+    #status {
+      min-height: 1.25em;
+      font-size: 0.85rem;
+      color: #7d8a9a;
+      text-align: center;
+      padding: 0 8px;
+      line-height: 1.5;
+      flex-shrink: 0;
+    }
+
+    #status.err { color: #f87171; }
+
+    /* ── Target info ──────────────────────────────────────── */
+
+    #targetInfo {
+      text-align: center;
+      flex-shrink: 0;
+      animation: rise 0.35s ease;
+    }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    #placeName {
+      font-size: clamp(1rem, 4.5vw, 1.2rem);
+      font-weight: 600;
+      color: #e6edf3;
+      margin-bottom: 4px;
+    }
+
+    #placeDist {
+      font-size: 0.9rem;
+      color: #f97316;
+      font-weight: 500;
+    }
+
+    /* ── Buttons ──────────────────────────────────────────── */
+
+    .btn-row {
+      display: flex;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    button {
+      padding: 12px 30px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      border: none;
+      outline: none;
+      transition: opacity 0.15s, transform 0.1s;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    button:active { transform: scale(0.94); opacity: 0.8; }
+
+    #startBtn { background: #f97316; color: #fff; }
+
+    #rescanBtn {
+      background: rgba(255, 255, 255, 0.07);
+      color: #c0cad8;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+<h1>🌯 Kebab Compass</h1>
+
+<div class="compass-wrap" id="compassWrap">
+  <svg class="compass-svg" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <radialGradient id="bgGrad" cx="50%" cy="50%" r="50%">
+        <stop offset="0%"   stop-color="#19253d"/>
+        <stop offset="100%" stop-color="#0d1117"/>
+      </radialGradient>
+    </defs>
+
+    <!-- Background -->
+    <circle cx="150" cy="150" r="148" fill="url(#bgGrad)"/>
+
+    <!-- Outer ring (pulses during loading) -->
+    <circle class="ring-outer" cx="150" cy="150" r="146"
+            fill="none" stroke="#2a3d60" stroke-width="2"/>
+
+    <!-- Inner ring -->
+    <circle cx="150" cy="150" r="122"
+            fill="none" stroke="#192436" stroke-width="1"/>
+
+    <!-- Tick marks — appended by JS using createElementNS (no innerHTML) -->
+    <g id="ticks"></g>
+
+    <!-- Cardinal labels -->
+    <text x="150" y="22"  text-anchor="middle" font-size="15" font-weight="bold"
+          font-family="system-ui,sans-serif" fill="#f97316">N</text>
+    <text x="279" y="155" text-anchor="middle" font-size="13"
+          font-family="system-ui,sans-serif" fill="#3d5068">E</text>
+    <text x="150" y="290" text-anchor="middle" font-size="13"
+          font-family="system-ui,sans-serif" fill="#3d5068">S</text>
+    <text x="21"  y="155" text-anchor="middle" font-size="13"
+          font-family="system-ui,sans-serif" fill="#3d5068">W</text>
+
+    <!-- Compass needle — rotated by JS -->
+    <g id="compassNeedle">
+      <!-- North/target half — orange -->
+      <path d="M150 60 L143 150 L157 150 Z" fill="#f97316"/>
+      <!-- South/opposite half — muted blue -->
+      <path d="M150 240 L143 150 L157 150 Z" fill="#203050"/>
+      <!-- Centre cap -->
+      <circle cx="150" cy="150" r="9"   fill="#0d1117" stroke="#f97316" stroke-width="2"/>
+      <circle cx="150" cy="150" r="3.5" fill="#f97316"/>
+    </g>
+  </svg>
+</div>
+
+<p id="status">Tap Start to find the nearest kebab</p>
+
+<div id="targetInfo" class="hidden">
+  <div id="placeName"></div>
+  <div id="placeDist"></div>
+</div>
+
+<div class="btn-row">
+  <button id="startBtn">Start</button>
+  <button id="rescanBtn" class="hidden">Re-scan</button>
+</div>
+
+<script>
+'use strict';
+
+/* ── DOM refs ─────────────────────────────────────────────── */
+const compassWrap = document.getElementById('compassWrap');
+const needle      = document.getElementById('compassNeedle');
+const statusEl    = document.getElementById('status');
+const targetInfo  = document.getElementById('targetInfo');
+const placeNameEl = document.getElementById('placeName');
+const placeDistEl = document.getElementById('placeDist');
+const startBtn    = document.getElementById('startBtn');
+const rescanBtn   = document.getElementById('rescanBtn');
+
+/* ── State ────────────────────────────────────────────────── */
+let userLat       = null;
+let userLon       = null;
+let targetBearing = null;   // degrees from North to target
+let deviceHeading = null;   // degrees clockwise from North (device)
+let currentAngle  = 0;      // accumulated CSS rotation (avoids spin-back)
+let orientEnabled = false;
+let headingTimer  = null;
+
+/* ── Tick marks (DOM-safe, no innerHTML) ──────────────────── */
+(function buildTicks() {
+  const NS = 'http://www.w3.org/2000/svg';
+  const g  = document.getElementById('ticks');
+  const cx = 150, cy = 150, outerR = 145;
+
+  for (let deg = 0; deg < 360; deg += 5) {
+    const major   = deg % 45 === 0;
+    const tickLen = major ? 13 : 6;
+    const r1  = outerR - tickLen;
+    const rad = (deg - 90) * Math.PI / 180;
+
+    const line = document.createElementNS(NS, 'line');
+    line.setAttribute('x1', (cx + r1     * Math.cos(rad)).toFixed(1));
+    line.setAttribute('y1', (cy + r1     * Math.sin(rad)).toFixed(1));
+    line.setAttribute('x2', (cx + outerR * Math.cos(rad)).toFixed(1));
+    line.setAttribute('y2', (cy + outerR * Math.sin(rad)).toFixed(1));
+    line.setAttribute('stroke', major ? '#3d5570' : '#1e2e44');
+    line.setAttribute('stroke-width', major ? '2' : '1');
+    g.appendChild(line);
+  }
+}());
+
+/* ── Math ─────────────────────────────────────────────────── */
+function haversine(lat1, lon1, lat2, lon2) {
+  const R  = 6371000;
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const dφ = (lat2 - lat1) * Math.PI / 180;
+  const dλ = (lon2 - lon1) * Math.PI / 180;
+  const a  = Math.sin(dφ / 2) ** 2
+            + Math.cos(φ1) * Math.cos(φ2) * Math.sin(dλ / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function calcBearing(lat1, lon1, lat2, lon2) {
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const dλ = (lon2 - lon1) * Math.PI / 180;
+  const y  = Math.sin(dλ) * Math.cos(φ2);
+  const x  = Math.cos(φ1) * Math.sin(φ2)
+            - Math.sin(φ1) * Math.cos(φ2) * Math.cos(dλ);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+function fmtDist(m) {
+  return m >= 1000
+    ? (m / 1000).toFixed(1) + ' km away'
+    : Math.round(m) + ' m away';
+}
+
+/* ── Arrow rotation ───────────────────────────────────────── */
+function rotateTo(deg) {
+  // Normalise accumulated angle to [0,360) for shortest-path diff
+  const cur  = ((currentAngle % 360) + 360) % 360;
+  let   diff = deg - cur;
+  if (diff >  180) diff -= 360;
+  if (diff < -180) diff += 360;
+  currentAngle += diff;
+  needle.style.transform = 'rotate(' + currentAngle + 'deg)';
+}
+
+function updateArrow() {
+  if (targetBearing === null) return;
+  const dir = deviceHeading !== null
+    ? ((targetBearing - deviceHeading) % 360 + 360) % 360
+    : targetBearing;   // no live heading: show absolute bearing from North
+  rotateTo(dir);
+}
+
+/* ── Device orientation ───────────────────────────────────── */
+function onOrientation(evt) {
+  let heading = null;
+
+  if (evt.webkitCompassHeading != null) {
+    // iOS Safari — already clockwise degrees from true North
+    heading = evt.webkitCompassHeading;
+  } else if (evt.absolute && evt.alpha != null) {
+    // Android / Chrome (deviceorientationabsolute) — alpha is CCW from North
+    heading = (360 - evt.alpha) % 360;
+  }
+
+  if (heading === null) return;
+
+  // Cancel "no compass data" fallback timer on first valid reading
+  if (headingTimer !== null) {
+    clearTimeout(headingTimer);
+    headingTimer = null;
+    setStatus('');
+  }
+
+  deviceHeading = heading;
+  updateArrow();
+}
+
+async function enableOrientation() {
+  if (orientEnabled) return;
+
+  if (typeof DeviceOrientationEvent !== 'undefined' &&
+      typeof DeviceOrientationEvent.requestPermission === 'function') {
+    // iOS 13+ — must be called synchronously from within a user-gesture handler
+    try {
+      const result = await DeviceOrientationEvent.requestPermission();
+      if (result === 'granted') {
+        window.addEventListener('deviceorientation', onOrientation, true);
+        orientEnabled = true;
+      } else {
+        setStatus('Compass access denied — arrow shows bearing from North.');
+      }
+    } catch {
+      setStatus('Compass unavailable — arrow shows bearing from North.');
+    }
+  } else {
+    // Android and all other browsers
+    window.addEventListener('deviceorientationabsolute', onOrientation, true);
+    window.addEventListener('deviceorientation', onOrientation, true);
+    orientEnabled = true;
+  }
+}
+
+/* ── Overpass API ─────────────────────────────────────────── */
+async function findKebabs() {
+  const radius = 5000; // metres
+  const coord  = userLat + ',' + userLon;
+  const around = '(around:' + radius + ',' + coord + ')';
+
+  // Comprehensive OSM tagging: name, cuisine, shop
+  const q = '[out:json][timeout:20];('
+    + 'node["name"~"kebab",i]'    + around + ';'
+    + 'node["cuisine"~"kebab",i]' + around + ';'
+    + 'node["shop"="kebab"]'      + around + ';'
+    + 'way["name"~"kebab",i]'     + around + ';'
+    + 'way["cuisine"~"kebab",i]'  + around + ';'
+    + ');out center;';
+
+  const ctrl  = new AbortController();
+  const timer = setTimeout(function() { ctrl.abort(); }, 22000);
+
+  try {
+    setStatus('Searching for kebabs…');
+    const res = await fetch('https://overpass-api.de/api/interpreter', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body:    'data=' + encodeURIComponent(q),
+      signal:  ctrl.signal,
+    });
+    clearTimeout(timer);
+
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    handlePlaces(data.elements);
+  } catch (e) {
+    clearTimeout(timer);
+    compassWrap.classList.remove('loading');
+    setStatus(
+      e.name === 'AbortError'
+        ? 'Request timed out — try again.'
+        : 'Could not fetch places — check your connection.',
+      true
+    );
+    rescanBtn.classList.remove('hidden');
+  }
+}
+
+function handlePlaces(elements) {
+  compassWrap.classList.remove('loading');
+
+  if (!elements || elements.length === 0) {
+    setStatus('No kebab places found within 5 km.', true);
+    rescanBtn.classList.remove('hidden');
+    return;
+  }
+
+  let best = null, bestDist = Infinity;
+
+  for (let i = 0; i < elements.length; i++) {
+    const el  = elements[i];
+    const lat = el.lat != null ? el.lat : (el.center ? el.center.lat : null);
+    const lon = el.lon != null ? el.lon : (el.center ? el.center.lon : null);
+    if (lat == null || lon == null) continue;
+
+    const d = haversine(userLat, userLon, lat, lon);
+    if (d < bestDist) {
+      bestDist = d;
+      best = {
+        lat:  lat,
+        lon:  lon,
+        name: (el.tags && el.tags.name) ? el.tags.name : 'Kebab Place',
+        dist: d,
+      };
+    }
+  }
+
+  if (!best) {
+    setStatus('No valid locations returned.', true);
+    rescanBtn.classList.remove('hidden');
+    return;
+  }
+
+  targetBearing = calcBearing(userLat, userLon, best.lat, best.lon);
+
+  // textContent is XSS-safe
+  placeNameEl.textContent = best.name;
+  placeDistEl.textContent = fmtDist(best.dist);
+  targetInfo.classList.remove('hidden');
+  setStatus('');
+  rescanBtn.classList.remove('hidden');
+  updateArrow();
+
+  // If no compass readings arrive within 4 s, show a static-bearing hint
+  headingTimer = setTimeout(function() {
+    if (deviceHeading === null) {
+      setStatus('No compass data — arrow shows '
+        + Math.round(targetBearing) + '° from North.');
+    }
+  }, 4000);
+}
+
+/* ── Geolocation ──────────────────────────────────────────── */
+function getLocation() {
+  if (!navigator.geolocation) {
+    setStatus('Geolocation is not supported by this browser.', true);
+    return;
+  }
+
+  compassWrap.classList.add('loading');
+  setStatus('Getting your location…');
+
+  navigator.geolocation.getCurrentPosition(
+    function(pos) {
+      userLat = pos.coords.latitude;
+      userLon = pos.coords.longitude;
+      findKebabs();
+    },
+    function(err) {
+      compassWrap.classList.remove('loading');
+      var msgs = {
+        1: 'Location access denied — enable it in browser settings.',
+        2: 'Your location is currently unavailable.',
+        3: 'Location request timed out — try again.',
+      };
+      setStatus(msgs[err.code] || 'Location error.', true);
+      startBtn.textContent = 'Retry';
+      startBtn.classList.remove('hidden');
+    },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+  );
+}
+
+/* ── UI helpers ───────────────────────────────────────────── */
+function setStatus(msg, isError) {
+  statusEl.textContent = msg;
+  statusEl.className   = isError ? 'err' : '';
+}
+
+function resetUI() {
+  if (headingTimer !== null) { clearTimeout(headingTimer); headingTimer = null; }
+  targetBearing = null;
+  startBtn.classList.add('hidden');
+  rescanBtn.classList.add('hidden');
+  targetInfo.classList.add('hidden');
+  setStatus('');
+}
+
+/* ── Button handlers ──────────────────────────────────────── */
+startBtn.addEventListener('click', async function() {
+  resetUI();
+
+  // Must call requestPermission() from within a user-gesture handler (iOS)
+  await enableOrientation();
+
+  getLocation();
+});
+
+rescanBtn.addEventListener('click', function() {
+  resetUI();
+  getLocation();
+});
+</script>
+</body>
+</html>
