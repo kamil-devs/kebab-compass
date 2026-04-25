@@ -461,8 +461,11 @@ function getLocation() {
     },
     function(err) {
       compassWrap.classList.remove('loading');
+      var isIOS = /iP(hone|ad|od)/.test(navigator.userAgent);
       var msgs = {
-        1: 'Location access denied — enable it in browser settings.',
+        1: isIOS
+          ? 'Location blocked for this site. In Safari tap AA in the address bar → Website Settings → Location → Allow.'
+          : 'Location access denied — enable it in your browser settings.',
         2: 'Your location is currently unavailable.',
         3: 'Location request timed out — try again.',
       };
