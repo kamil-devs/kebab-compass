@@ -444,23 +444,14 @@ function handlePlaces(elements) {
 }
 
 /* ── Geolocation ──────────────────────────────────────────── */
-async function getLocation() {
+function getLocation() {
   if (!navigator.geolocation) {
     setStatus('Geolocation is not supported by this browser.', true);
     return;
   }
 
-  // Check Permissions API state for diagnostics (iOS 16+)
-  var permState = 'n/a';
-  if (navigator.permissions) {
-    try {
-      var ps = await navigator.permissions.query({ name: 'geolocation' });
-      permState = ps.state;
-    } catch (e) {}
-  }
-
   compassWrap.classList.add('loading');
-  setStatus('Getting location… [perm:' + permState + ']');
+  setStatus('Getting your location…');
 
   navigator.geolocation.getCurrentPosition(
     function(pos) {
@@ -470,7 +461,12 @@ async function getLocation() {
     },
     function(err) {
       compassWrap.classList.remove('loading');
-      setStatus('[' + err.code + '] ' + err.message, true);
+      var msgs = {
+        1: 'Location access denied. Go to Settings → Privacy → Location Services → Safari → Allow.',
+        2: 'Your location is currently unavailable.',
+        3: 'Location request timed out — try again.',
+      };
+      setStatus(msgs[err.code] || 'Location error.', true);
       startBtn.textContent = 'Retry';
       startBtn.classList.remove('hidden');
     },
@@ -497,10 +493,13 @@ function resetUI() {
 startBtn.addEventListener('click', async function() {
   resetUI();
 
-  // Must call requestPermission() from within a user-gesture handler (iOS)
-  await enableOrientation();
-
+  // Geolocation must be called synchronously within the user gesture —
+  // awaiting orientation permission first breaks iOS WebKit's activation
+  // context and causes a silent denial (error code 1, no prompt shown).
   getLocation();
+
+  // Orientation permission can be requested after; it has its own dialog.
+  await enableOrientation();
 });
 
 rescanBtn.addEventListener('click', function() {
